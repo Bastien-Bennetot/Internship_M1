@@ -1,0 +1,243 @@
+---
+title: "Data analysis"
+author: "Bastien BENNETOT"
+date: "13 avril 2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,warning = FALSE, message=FALSE)
+library(knitr)
+library(rgl)
+knit_hooks$set(webgl = hook_webgl)
+```
+
+#Initialisation
+```{r }
+setwd("~/Bureau/STAGE M1 IMPORTANT/algo")
+library(mda)
+library(FactoMineR)
+library(rgl)
+library(ggmap)
+library(ggplot2)
+library(missMDA)
+library(sm)
+library(factoextra)
+library(Hmisc)
+library(ggrepel)
+mushroom_observer_color<-read.csv(file = "mushroom_observer_color.csv")
+mushroom_observer_color_group<-read.csv(file = "mushroom_observer_color_group.csv")
+
+#Reduction to America function
+reduction_to_usa <-function(dataset){
+dataset<-dataset[dataset$latitude>25,]
+dataset<-dataset[dataset$latitude<50,]
+dataset<-dataset[dataset$longitude< -67,]
+dataset<-dataset[dataset$longitude> -130,]
+dataset<-droplevels(dataset)
+return(dataset)
+}
+
+mushroom_observer_color_usa<- reduction_to_usa(mushroom_observer_color)
+mushroom_observer_color_group_usa<-reduction_to_usa(mushroom_observer_color_group)
+
+
+#Plot range map for each species function
+plot_observation_map<-function(dataset,name_of_the_dataset,location){
+mp <- NULL
+mapWorld <- borders(location, colour="grey50", fill="grey50" ) # create a layer of borders
+mp <- ggplot() +   mapWorld + ggtitle(capitalize(name_of_the_dataset))+xlab("Longitude")+ylab("Latitude")+  theme(plot.title = element_text(hjust = 0.5))
+#Now Layer the observations
+mp <- mp+ geom_point(data=dataset,aes(x = longitude, y = latitude) ,color=dataset$carp_color, size=3,pch=3) 
+mp <- mp+ geom_rug(data=dataset, aes(x = longitude, y= latitude), size=0.1,pch=20,color=dataset$carp_color) 
+plot(mp)
+}
+
+
+
+```
+
+
+
+#World map of color
+##All color
+```{r }
+plot_observation_map(mushroom_observer_color,"World distribution of amanita by color","world")
+```
+
+##By color
+###Red
+```{r }
+plot_observation_map(mushroom_observer_color[mushroom_observer_color$carp_color=="red",],"World distribution of red amanita","world")
+```
+
+###Orange
+```{r }
+plot_observation_map(mushroom_observer_color[mushroom_observer_color$carp_color=="orange",],"World distribution of orange amanita","world")
+```
+
+###yellow
+```{r }
+plot_observation_map(mushroom_observer_color[mushroom_observer_color$carp_color=="yellow",],"World distribution of yellow amanita","world")
+```
+
+###white
+```{r }
+plot_observation_map(mushroom_observer_color[mushroom_observer_color$carp_color=="white",],"World distribution of white amanita","world")
+```
+
+###brown
+```{r }
+plot_observation_map(mushroom_observer_color[mushroom_observer_color$carp_color=="brown",],"World distribution of brown amanita","world")
+```
+
+
+###grey
+```{r }
+plot_observation_map(mushroom_observer_color[mushroom_observer_color$carp_color=="grey",],"World distribution of grey amanita","world")
+```
+
+
+#US map of color
+##All color
+```{r }
+plot_observation_map(mushroom_observer_color_usa,"World distribution of amanita by color","usa")
+```
+
+##By color
+###Red
+```{r }
+plot_observation_map(mushroom_observer_color_usa[mushroom_observer_color_usa$carp_color=="red",],"World distribution of red amanita","usa")
+```
+
+###Orange
+```{r }
+plot_observation_map(mushroom_observer_color_usa[mushroom_observer_color_usa$carp_color=="orange",],"World distribution of orange amanita","usa")
+```
+
+###yellow
+```{r }
+plot_observation_map(mushroom_observer_color_usa[mushroom_observer_color_usa$carp_color=="yellow",],"World distribution of yellow amanita","usa")
+```
+
+###white
+```{r }
+plot_observation_map(mushroom_observer_color_usa[mushroom_observer_color_usa$carp_color=="white",],"World distribution of white amanita","usa")
+```
+
+###brown
+```{r }
+plot_observation_map(mushroom_observer_color_usa[mushroom_observer_color_usa$carp_color=="brown",],"World distribution of brown amanita","usa")
+```
+
+
+###grey
+```{r }
+plot_observation_map(mushroom_observer_color_usa[mushroom_observer_color_usa$carp_color=="grey",],"World distribution of grey amanita","usa")
+```
+
+#Statistical analysis
+##FAMD: Factor Analysis for Mixed Data
+```{r testgl, webgl=TRUE}
+#Remove column full of NA
+mushroom_observer_color$phase1<-NULL
+mushroom_observer_color$phase2<-NULL
+mushroom_observer_color$roots<-NULL
+mushroom_observer_color$il<-NULL
+mushroom_observer_color$swr<-NULL
+
+mushroom_observer_color.FAMD<-mushroom_observer_color[, c("bio1", "bio2", 
+  "bio3", "bio4", "bio5", "bio6", "bio7", "bio8", "bio9", "bio10", "bio11", 
+  "bio12", "bio13", "bio14", "bio15", "bio16", "bio17", "bio18", "bio19", 
+  "t_texture", "drainage", "ref_depth", "awc_class", "add_prop", "t_gravel", 
+  "t_sand", "t_silt", "t_clay", "t_usda_tex_class", "t_ref_bulk_density", 
+  "t_bulk_density", "t_oc", "t_ph_h2o", "t_cec_clay", "t_cec_soil", "t_bs", 
+  "t_teb", "t_caco3", "t_caso4", "t_esp", "t_ece", "s_gravel", "s_sand", 
+  "s_silt", "s_clay", "s_usda_tex_class", "s_ref_bulk_density", 
+  "s_bulk_density", "s_oc", "s_ph_h2o", "s_cec_clay", "s_cec_soil", "s_bs", 
+  "s_teb", "s_caco3", "s_caso4", "s_esp", "s_ece", "FOR_2000", "GRS_2000", 
+  "NVG_2000", "sq1", "sq2", "sq3", "sq4", "sq5", "sq6", "sq7", "URB_2000", 
+  "WAT_2000",  "carp_color")]
+mushroom_observer_color.FAMD<-na.omit(mushroom_observer_color.FAMD)
+res<-FAMD(mushroom_observer_color.FAMD, ncp=5, sup.var=74:74, graph=FALSE)
+summary(res, nb.dec = 3, nbelements=10, nbind = 10, ncp = 3, file="")
+
+
+plot.FAMD(res,choix = "ind",cex=0.001)
+plot3d(res$ind$coord, col=mushroom_observer_color.FAMD$carp_color, size = 0.5, type = 's')
+
+plot.FAMD(res,choix = "var",cex =0.8 )
+
+
+
+
+```
+
+#Mixed discriminant analysis (MDA)
+##MDA on the world
+```{r}
+
+mushroom_observer_color.MDA<-mushroom_observer_color[, c("bio1", "bio2", 
+  "bio3", "bio4", "bio5", "bio6", "bio7", "bio8", "bio9", "bio10", "bio11", 
+  "bio12", "bio13", "bio14", "bio15", "bio16", "bio17", "bio18", "bio19", 
+  "t_texture", "drainage", "ref_depth", "awc_class", "add_prop", "t_gravel", 
+  "t_sand", "t_silt", "t_clay", "t_usda_tex_class", "t_ref_bulk_density", 
+  "t_bulk_density", "t_oc", "t_ph_h2o", "t_cec_clay", "t_cec_soil", "t_bs", 
+  "t_teb", "t_caco3", "t_caso4", "t_esp", "t_ece", "s_gravel", "s_sand", 
+  "s_silt", "s_clay", "s_usda_tex_class", "s_ref_bulk_density", 
+  "s_bulk_density", "s_oc", "s_ph_h2o", "s_cec_clay", "s_cec_soil", "s_bs", 
+  "s_teb", "s_caco3", "s_caso4", "s_esp", "s_ece", "FOR_2000", "GRS_2000", 
+  "NVG_2000", "sq1", "sq2", "sq3", "sq4", "sq5", "sq6", "sq7", "URB_2000", 
+  "WAT_2000", "carp_color")]
+mda_color<-mda(data = mushroom_observer_color.MDA,formula = carp_color~.)
+
+weight<-data.frame(abs(data.frame(mda_color$fit[1])[,1]))
+rownames(weight)<-rownames(data.frame(mda_color$fit[1]))
+colnames(weight)<-"variable"
+weight<-subset(weight,rownames(weight)!="Intercept")
+weight<-weight[order(-weight$variable), , drop = FALSE]
+
+ggplot(weight,aes(y = variable, x = seq(1, length(variable)))) + geom_point()+ ggtitle("Mixture discriminant analysis")+xlab("Index of variable")+ylab("Weight in the analysis")+  theme(plot.title = element_text(hjust = 0.5))+geom_text_repel(data=subset(weight, variable > 1.5),aes(y = variable, x = seq(1, length(variable)),label=rownames(subset(weight, variable > 1.5))))
+```
+
+##MDA in the USA
+```{r}
+library(mda)
+mushroom_observer_color_usa.MDA<-mushroom_observer_color_usa[, c("bio1", "bio2", 
+  "bio3", "bio4", "bio5", "bio6", "bio7", "bio8", "bio9", "bio10", "bio11", 
+  "bio12", "bio13", "bio14", "bio15", "bio16", "bio17", "bio18", "bio19", 
+  "t_texture", "drainage", "ref_depth", "awc_class", "add_prop", "t_gravel", 
+  "t_sand", "t_silt", "t_clay", "t_usda_tex_class", "t_ref_bulk_density", 
+  "t_bulk_density", "t_oc", "t_ph_h2o", "t_cec_clay", "t_cec_soil", "t_bs", 
+  "t_teb", "t_caco3", "t_caso4", "t_esp", "t_ece", "s_gravel", "s_sand", 
+  "s_silt", "s_clay", "s_usda_tex_class", "s_ref_bulk_density", 
+  "s_bulk_density", "s_oc", "s_ph_h2o", "s_cec_clay", "s_cec_soil", "s_bs", 
+  "s_teb", "s_caco3", "s_caso4", "s_esp", "s_ece", "FOR_2000", "GRS_2000", 
+  "NVG_2000", "sq1", "sq2", "sq3", "sq4", "sq5", "sq6", "sq7", "URB_2000", 
+  "WAT_2000", "carp_color")]
+mda_color_usa<-mda(data = mushroom_observer_color_usa.MDA,formula = carp_color~.)
+weight<-data.frame(abs(data.frame(mda_color_usa$fit[1])[,1]))
+rownames(weight)<-rownames(data.frame(mda_color_usa$fit[1]))
+colnames(weight)<-"variable"
+weight<-subset(weight,rownames(weight)!="Intercept")
+weight<-weight[order(-weight$variable), , drop = FALSE]
+ggplot(weight,aes(y = variable, x = seq(1, length(variable)))) + geom_point()+ ggtitle("Mixture discriminant analysis")+xlab("Index of variable")+ylab("Weight in the analysis")+  theme(plot.title = element_text(hjust = 0.5))+geom_text_repel(data=subset(weight, variable > 1.5),aes(y = variable, x = seq(1, length(variable)),label=rownames(subset(weight, variable > 1.5))),hjust=-0.5,vjust=1)
+```
+
+```{r}
+ggplot(mushroom_observer_color, aes(x=carp_color, y=t_cec_soil))+geom_boxplot(fill=c("brown","grey30","orange","red","grey90","yellow"),alpha = 0.8,color="black")+xlab("Sporophore color")
+ggplot(mushroom_observer_color, aes(x=carp_color, y=s_sand))+geom_boxplot(fill=c("brown","grey30","orange","red","grey90","yellow"),alpha = 0.8,color="black")+xlab("Sporophore color")
+ggplot(mushroom_observer_color, aes(x=carp_color, y=s_cec_clay))+geom_boxplot(fill=c("brown","grey30","orange","red","grey90","yellow"),alpha = 0.8,color="black")+xlab("Sporophore color")
+ggplot(mushroom_observer_color, aes(x=carp_color, y=t_cec_clay))+geom_boxplot(fill=c("brown","grey30","orange","red","grey90","yellow"),alpha = 0.8,color="black")+xlab("Sporophore color")
+ggplot(mushroom_observer_color, aes(x=carp_color, y=s_cec_soil))+geom_boxplot(fill=c("brown","grey30","orange","red","grey90","yellow"),alpha = 0.8,color="black")+xlab("Sporophore color")
+ggplot(mushroom_observer_color, aes(x=carp_color, y=s_gravel))+geom_boxplot(fill=c("brown","grey30","orange","red","grey90","yellow"),alpha = 0.8,color="black")+xlab("Sporophore color")
+ggplot(mushroom_observer_color, aes(x=carp_color, y=t_ph_h2o))+geom_boxplot(fill=c("brown","grey30","orange","red","grey90","yellow"),alpha = 0.8,color="black")+xlab("Sporophore color")
+
+
+
+
+```
+
+
+

@@ -1,0 +1,316 @@
+---
+title: "Biodiversity_analysis2"
+author: "Bastien BENNETOT"
+date: "11 mai 2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,warning = FALSE, message=FALSE)
+```
+
+#Initialization
+```{r}
+
+setwd("~/Bureau/STAGE M1 IMPORTANT/algo")
+library(schoolmath)
+library(dplyr)
+library(ggplot2)
+#library(rgbif)
+library(ggmap)
+require(plyr)
+require(reshape2)
+`%ni%` <- Negate(`%in%`) 
+#Load of dataframe
+amanita_species_name<-read.table(file = "amanita_species_name.csv",sep=",")
+colnames(amanita_species_name)<-"specname"
+
+mushroom_observer_all<-read.csv(file = "mushroom_observer_all.csv")
+mushroom_observer_all_usa<-read.csv(file = "mushroom_observer_all_usa.csv")
+mushroom_observer_amanita<-read.csv(file = "mushroom_observer_amanita.csv")
+mushroom_observer_amanita_usa<-read.csv(file = "mushroom_observer_amanita_usa.csv")
+
+inaturalist_amanita<-read.csv(file = "inaturalist_amanita.csv")
+inaturalist_amanita_usa<-read.csv(file = "inaturalist_amanita_usa.csv")
+inaturalist_plantae<-read.csv(file = "inaturalist_plantae.csv")
+
+
+gbif_amanita<-read.csv(file = "gbif_amanita.csv")
+
+
+
+#Attribute same (amanita) specname function
+amanita_specname<-function(dataset,amanita_species_name){
+  #in case that there is "sect." between "amanita"" and the species name
+  levels(dataset$specname)<-gsub(pattern=" sect.","" ,x=levels(dataset$specname))
+  #Change species names following the pattern "Amanita name"
+  for (i in amanita_species_name$specname)
+  {
+    
+   levels(dataset$specname)[grep(pattern = i,levels(dataset$specname),ignore.case = TRUE)]<-rep(i,each=length( levels(dataset$specname)[grep(pattern = i,levels(dataset$specname),ignore.case = TRUE)]))
+  }
+dataset<-dataset[dataset$specname%in%amanita_species_name$specname,]
+dataset<-droplevels(dataset)  
+return(dataset)
+}
+
+mushroom_observer_amanita<-amanita_specname(mushroom_observer_amanita,amanita_species_name)
+mushroom_observer_amanita_usa<-amanita_specname(mushroom_observer_amanita_usa,amanita_species_name)
+inaturalist_amanita<-amanita_specname(inaturalist_amanita,amanita_species_name)
+inaturalist_amanita_usa<-amanita_specname(inaturalist_amanita_usa,amanita_species_name)
+gbif_amanita<-amanita_specname(gbif_amanita,amanita_species_name)
+
+gbif_amanita$observation <- seq.int(nrow(gbif_amanita))
+
+#Reduction to America function
+reduction_to_usa <-function(dataset){
+dataset<-dataset[dataset$latitude>25,]
+dataset<-dataset[dataset$latitude<50,]
+dataset<-dataset[dataset$longitude< -67,]
+dataset<-dataset[dataset$longitude> -130,]
+dataset<-droplevels(dataset)
+return(dataset)
+}
+
+inaturalist_plantae_usa<-reduction_to_usa(inaturalist_plantae)
+
+#Mixed dataset
+
+mushroom_observer_amanita<-mushroom_observer_amanita[,c("observation","latitude","longitude","specname")]
+inaturalist_amanita<-inaturalist_amanita[,c("observation","latitude","longitude","specname")]
+gbif_amanita<-gbif_amanita[,c("observation","latitude","longitude","specname")]
+mixed_amanita<- rbind(gbif_amanita,mushroom_observer_amanita)
+mixed_amanita$observation <- seq.int(nrow(mixed_amanita))
+mixed_amanita_usa<-reduction_to_usa(mixed_amanita)
+
+###############################################################################################################################
+#Plot species_richness function
+##Tile
+plot_species_richness_tile<-function(dataset,resolution,location,name_dataset){
+#Bin longitude and latitude
+lat_breaks <- seq(-90,90,resolution)
+long_breaks <- seq(-180,180,resolution*2)
+
+middle<-cbind(lat_breaks,long_breaks,1:length(long_breaks))
+middle<-data.frame(middle)
+colnames(middle)<-c("lat_middle","long_middle","cells_associated")
+middle$lat_middle<-middle$lat_middle+resolution/2
+middle$long_middle<-middle$long_middle+resolution
+
+dataset$lat <- cut(dataset$latitude,breaks = lat_breaks, labels=F)
+dataset$long <- cut(dataset$longitude,breaks = long_breaks, labels=F)
+#Aggregate observations 
+dataset <- ddply(dataset, .(lat,long), plyr::summarize, div=length(unique(specname)))
+print(qplot(dataset$div, geom="histogram",main=paste("Frequencies of biodiversity level for",name_dataset), xlab = "Number of species", ylab = "Number of tile",alpha=I(0.8),fill=I("red")))
+dataset2<-dataset
+for (i in 1:length(dataset2$lat)){
+dataset2$lat[i]<-middle$lat_middle[middle$cells_associated==dataset2$lat[i]]
+dataset2$long[i]<-middle$long_middle[middle$cells_associated==dataset2$long[i]]
+}
+
+mp <- NULL
+mapWorld <- borders(location, colour="grey50", fill="grey50" ) # create a layer of borders
+mp <- ggplot() +   mapWorld + ggtitle(paste("Species richness for",name_dataset))+xlab("Longitude")+ylab("Latitude")+  theme(plot.title = element_text(hjust = 0.5))
+mp <-mp+ geom_tile(data=dataset2,aes(x =long ,y = lat,fill=div,width=resolution*2,height=resolution*2/2))
+plot(mp)
+}
+###############################################################################################################################
+#Density
+plot_species_richness_density<-function(dataset,resolution,location,name_dataset){
+#Bin longitude and latitude
+lat_breaks <- seq(-90,90,resolution)
+long_breaks <- seq(-180,180,resolution*2)
+
+middle<-cbind(lat_breaks,long_breaks,1:length(long_breaks))
+middle<-data.frame(middle)
+colnames(middle)<-c("lat_middle","long_middle","cells_associated")
+middle$lat_middle<-middle$lat_middle+resolution/2
+middle$long_middle<-middle$long_middle+resolution
+
+dataset$lat <- cut(dataset$latitude,breaks = lat_breaks, labels=F)
+dataset$long <- cut(dataset$longitude,breaks = long_breaks, labels=F)
+#Aggregate observations 
+dataset <- ddply(dataset, .(lat,long), plyr::summarize, div=length(unique(specname)))
+print(qplot(dataset$div, geom="histogram",main=paste("Frequencies of biodiversity level for",name_dataset), xlab = "Number of species", ylab = "Number of tile",alpha=I(0.8),fill=I("red")))
+dataset2<-dataset
+for (i in 1:length(dataset2$lat)){
+dataset2$lat[i]<-middle$lat_middle[middle$cells_associated==dataset2$lat[i]]
+dataset2$long[i]<-middle$long_middle[middle$cells_associated==dataset2$long[i]]
+}
+
+dataset3<- dataset2[rep(row.names(dataset2), dataset2$div), 1:2]
+colnames(dataset3)<-c("latitude","longitude")
+mp <- NULL
+mapWorld <- borders(location, colour="grey50", fill="grey50" ) # create a layer of borders
+mp <- ggplot() +   mapWorld + ggtitle(paste("Species richness for",name_dataset))+xlab("longitude")+ylab("latitude")+  theme(plot.title = element_text(hjust = 0.5))
+mp <- mp + geom_density2d(data=dataset3, aes(x = longitude, y= latitude),size=0.05,col="black")+ stat_density2d(data =dataset3 , aes(x = longitude, y= latitude,fill = ..level.., alpha = ..level..), geom = 'polygon')+scale_fill_gradient(low = "green", high = "red")+scale_alpha(range = c(0.25, 0.85), guide = FALSE)
+
+mp <- mp+ geom_rug(data=dataset3, aes(x = longitude, y= latitude), size=0.1,pch=20,color="red") 
+plot(mp)
+return(mp)
+}
+###############################################################################################################################
+##Normalized by observation number
+plot_species_richness_density_normalized_by_observation<-function(dataset,resolution,location,name_dataset){
+#Bin longitude and latitude
+lat_breaks <- seq(-90,90,resolution)
+long_breaks <- seq(-180,180,resolution*2)
+
+middle<-cbind(lat_breaks,long_breaks,1:length(long_breaks))
+middle<-data.frame(middle)
+colnames(middle)<-c("lat_middle","long_middle","cells_associated")
+middle$lat_middle<-middle$lat_middle+resolution/2
+middle$long_middle<-middle$long_middle+resolution
+
+dataset$lat <- cut(dataset$latitude,breaks = lat_breaks, labels=F)
+dataset$long <- cut(dataset$longitude,breaks = long_breaks, labels=F)
+dataset4<-dataset
+#Aggregate observations 
+dataset4 <- ddply(dataset4, .(lat,long), plyr::summarize, div=length(unique(observation)))
+
+#Aggregate observations 
+dataset <- ddply(dataset, .(lat,long), plyr::summarize, div=length(unique(specname)))
+
+print(qplot(dataset$div, geom="histogram",main=paste("Frequencies of biodiversity level for",name_dataset), xlab = "Number of species", ylab = "Number of tile",alpha=I(0.8),fill=I("red")))
+dataset$div<-dataset$div*(max(dataset4$div)/dataset4$div)
+dataset2<-dataset
+for (i in 1:length(dataset2$lat)){
+dataset2$lat[i]<-middle$lat_middle[middle$cells_associated==dataset2$lat[i]]
+dataset2$long[i]<-middle$long_middle[middle$cells_associated==dataset2$long[i]]
+}
+
+dataset3<- dataset2[rep(row.names(dataset2), dataset2$div), 1:2]
+colnames(dataset3)<-c("latitude","longitude")
+mp <- NULL
+mapWorld <- borders(location, colour="grey50", fill="grey50" ) # create a layer of borders
+mp <- ggplot() +   mapWorld + ggtitle(paste("Species richness for",name_dataset))+xlab("longitude")+ylab("latitude")+  theme(plot.title = element_text(hjust = 0.5))
+mp <- mp + geom_density2d(data=dataset3, aes(x = longitude, y= latitude),size=0.05,col="black")+ stat_density2d(data =dataset3 , aes(x = longitude, y= latitude,fill = ..level.., alpha = ..level..), geom = 'polygon')+scale_fill_gradient(low = "green", high = "red")+scale_alpha(range = c(0.25, 0.85), guide = FALSE)
+
+mp <- mp+ geom_rug(data=dataset3, aes(x = longitude, y= latitude), size=0.1,pch=20,color="red") 
+plot(mp)
+return(mp)
+}
+
+###############################################################################################################################
+##Density divided by observation with a threshold
+plot_species_richness_density_normalized_by_observation_threshold<-function(dataset,resolution,location,name_dataset,threshold_asymptote){
+#Bin longitude and latitude
+lat_breaks <- seq(-90,90,resolution)
+long_breaks <- seq(-180,180,resolution*2)
+
+middle<-cbind(lat_breaks,long_breaks,1:length(long_breaks))
+middle<-data.frame(middle)
+colnames(middle)<-c("lat_middle","long_middle","cells_associated")
+middle$lat_middle<-middle$lat_middle+resolution/2
+middle$long_middle<-middle$long_middle+resolution
+
+dataset$lat <- cut(dataset$latitude,breaks = lat_breaks, labels=F)
+dataset$long <- cut(dataset$longitude,breaks = long_breaks, labels=F)
+dataset4<-dataset
+#Aggregate observations 
+dataset4 <- ddply(dataset4, .(lat,long), plyr::summarize, div=length(unique(observation)))
+
+#Aggregate observations 
+dataset <- ddply(dataset, .(lat,long), plyr::summarize, div=length(unique(specname)))
+print(qplot(dataset$div, geom="histogram",main=paste("Frequencies of biodiversity level for",name_dataset), xlab = "Number of species", ylab = "Number of tile",alpha=I(0.8),fill=I("red")))
+
+sampling<-data.frame(cbind(dataset4$div,dataset$div))
+graph<-ggplot(data =sampling,aes(x = X1, y = X2 ))+geom_point(size=1, pch=3)+ggtitle(paste("Biodiversity sampled per observation for",name_dataset))+xlab("Observation")+ylab("Species count")+  theme(plot.title = element_text(hjust = 0.5))+geom_smooth(method="auto",formula= (y ~ log(x)),aes(color="log Model"))+geom_smooth(method="auto",formula= (y ~ exp(-x)),aes(color="neg exponential Model"))
+exp_model<-ggplot_build(graph)$data[[3]]
+log_model<-ggplot_build(graph)$data[[2]]
+threshold<-min(log_model$x[log_model$y>max(log_model$y)*threshold_asymptote])
+graph<-graph+geom_vline(xintercept = threshold, linetype=4)
+plot(graph)
+
+
+for (i in 1:length(dataset4$div)){
+  if (dataset4$div[i]<-threshold){
+dataset$div[i]<-dataset$div[i]*(max(dataset4$div)/dataset4$div[i])
+  }
+  else {
+    dataset$div[i]<-dataset$div[i]*(max(dataset4$div)/threshold)
+  }
+}
+
+dataset2<-dataset
+for (i in 1:length(dataset2$lat)){
+dataset2$lat[i]<-middle$lat_middle[middle$cells_associated==dataset2$lat[i]]
+dataset2$long[i]<-middle$long_middle[middle$cells_associated==dataset2$long[i]]
+}
+
+dataset3<- dataset2[rep(row.names(dataset2), dataset2$div), 1:2]
+colnames(dataset3)<-c("latitude","longitude")
+
+mp <- NULL
+mapWorld <- borders(location, colour="grey50", fill="grey50" ) # create a layer of borders
+mp <- ggplot() +   mapWorld + ggtitle(paste("Species richness for",name_dataset))+xlab("longitude")+ylab("latitude")+  theme(plot.title = element_text(hjust = 0.5)) + geom_density2d(data=dataset3, aes(x = longitude, y= latitude),size=0.05,col="black")+ stat_density2d(data =dataset3 , aes(x = longitude, y= latitude,fill = ..level.., alpha = ..level..), geom = 'polygon')+scale_fill_gradient(low = "green", high = "red")+scale_alpha(range = c(0.25, 0.85), guide = FALSE) + geom_rug(data=dataset3, aes(x = longitude, y= latitude), size=0.1,pch=20,color="red") 
+plot(mp)
+return(mp,graph)
+}
+
+```
+#Biodiversity 
+##Panel1
+###Tile representation
+```{r}
+#Tile plot
+plot_species_richness_tile(dataset = mushroom_observer_amanita_usa,resolution = 1,location = "usa",name_dataset = "Mushroom observer")
+
+###Density plot
+plot_species_richness_density(dataset = mushroom_observer_amanita_usa,resolution = 1,location = "usa",name_dataset = "Mushroom observer")
+
+####Normalization
+#####Density divided by observation
+plot_species_richness_density_normalized_by_observation(dataset = mushroom_observer_amanita_usa,resolution = 1,location = "usa",name_dataset = "Mushroom observer")
+
+##Normalization with a threshold
+plot_species_richness_density_normalized_by_observation_threshold(dataset = mushroom_observer_amanita_usa,resolution = 1,location = "usa",name_dataset = "Mushroom observer",threshold_asymptote = 0.75)
+```
+
+##Panel2 :Resolution
+```{r}
+plot_species_richness_density_normalized_by_observation_threshold(dataset = mushroom_observer_amanita_usa,resolution = 1,location = "usa",name_dataset = "Mushroom observer resolution=1",threshold_asymptote = 0.75)
+plot_species_richness_density_normalized_by_observation_threshold(dataset = mushroom_observer_amanita_usa,resolution = 0.75,location = "usa",name_dataset = "Mushroom observer resolution=0.75",threshold_asymptote = 0.75)
+plot_species_richness_density_normalized_by_observation_threshold(dataset = mushroom_observer_amanita_usa,resolution = 0.5,location = "usa",name_dataset = "Mushroom observer resolution=0.5",threshold_asymptote = 0.75)
+plot_species_richness_density_normalized_by_observation_threshold(dataset = mushroom_observer_amanita_usa,resolution = 0.25,location = "usa",name_dataset = "Mushroom observer resolution=0.25",threshold_asymptote = 0.75)
+
+```
+
+##Panel 3 : Database bias
+```{r}
+#Mushroom observer
+plot_species_richness_density_normalized_by_observation_threshold(dataset = mushroom_observer_amanita,resolution = 1,location = "world",name_dataset = "Mushroom observer",threshold_asymptote = 0.75)
+#Gbif
+plot_species_richness_density_normalized_by_observation_threshold(dataset = gbif_amanita,resolution = 1,location = "world",name_dataset = "Gbif",threshold_asymptote = 0.30)
+
+###Mixed amanita
+plot_species_richness_density_normalized_by_observation_threshold(dataset = mixed_amanita,resolution = 1,location = "world",name_dataset = "Mixed data",threshold_asymptote = 0.30)
+```
+
+###All iNaturalist plantae
+```{r}
+plot_species_richness_density_normalized_by_observation_threshold(dataset = inaturalist_plantae,resolution = 1,location = "world",name_dataset = "iNaturalist plantae",threshold_asymptote = 0.75)
+```
+
+#In the USA
+
+```{r}
+plot_species_richness_density_normalized_by_observation_threshold(dataset = mixed_amanita_usa,resolution = 1,location = "usa",name_dataset = "Mixed data for Amanita",threshold_asymptote = 0.75)
+```
+
+```{r}
+plot_species_richness_density_normalized_by_observation_threshold(dataset = inaturalist_plantae_usa,resolution =1,location = "usa",name_dataset = "iNaturalist plantae",threshold_asymptote = 0.75)
+```
+
+
+```{r}
+
+plot_species_richness_density_normalized_by_observation_threshold(dataset = gbif_amanita,resolution =1,location = "world",name_dataset = "gbif amanita",threshold_asymptote = 0.75)
+
+#plot_species_richness_density_normalized_by_observation(dataset = gbif_amanita,resolution =1,location = "world",name_dataset = "gbif amanita")
+```
+
+
+

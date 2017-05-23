@@ -1,0 +1,311 @@
+---
+title: "Pre-analysis script for data preparation"
+author: "Bastien BENNETOT"
+date: "13 avril 2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+#Mushroom observer
+## Initialisation
+```{r,echo=TRUE}
+setwd("~/Bureau/STAGE M1 IMPORTANT/algo")
+
+library(sp)
+library(SDMTools)
+library(raster)
+library(foreach)
+library(Hmisc)
+library(rgdal)
+library(RSQLite)
+
+
+
+`%ni%` <- Negate(`%in%`) 
+
+###### Gather observation data
+mushroom_observer <- read.table("mushroom_observer_170203.csv", sep=",")
+mushroom_observer_all <- read.table("mushroom_observer_all_170220.csv", sep=",")
+inaturalist_all <-read.csv( file = "iNaturalist_all_170505.csv")
+```
+
+## Preparation of the dataframe for amanita only from mushroom observer
+```{r,echo=TRUE}
+#Add  columns for latitude and longitude coordinate and color
+mushroom_observer <- cbind(mushroom_observer,c(0),c(0),c(0),c(0))
+#Name columns
+colnames(mushroom_observer) <- c("observation", "specname", "north", "west", "east", "south","hemisphere","latitude","longitude","carp_color","spore_color")
+#Upress rows without species name
+mushroom_observer<-subset(mushroom_observer,specname!="")
+#Order by species name the dataframe
+mushroom_observer <- mushroom_observer[order(mushroom_observer[,2]), ]
+
+## Longitude and latitude computing from coordinate gathered by php code (north, west, east, south, hemisphere)
+#Calculating latitude and longitude based on location coordinate
+mushroom_observer$latitude<-(mushroom_observer$north+mushroom_observer$south)/2
+mushroom_observer$longitude<-(mushroom_observer$east+mushroom_observer$west)/2
+
+mushroom_observer$latitude[mushroom_observer$hemisphere=="ES"] <- -mushroom_observer$latitude[mushroom_observer$hemisphere=="ES"]
+mushroom_observer$latitude[mushroom_observer$hemisphere=="SE"] <- -mushroom_observer$latitude[mushroom_observer$hemisphere=="SE"]
+mushroom_observer$longitude[mushroom_observer$hemisphere=="NW"] <- -mushroom_observer$longitude[mushroom_observer$hemisphere=="NW"]
+mushroom_observer$longitude[mushroom_observer$hemisphere=="WN"] <- -mushroom_observer$longitude[mushroom_observer$hemisphere=="WN"]
+
+mushroom_observer$latitude[mushroom_observer$hemisphere=="SW"] <- -mushroom_observer$latitude[mushroom_observer$hemisphere=="SW"]
+mushroom_observer$latitude[mushroom_observer$hemisphere=="WS"] <- -mushroom_observer$latitude[mushroom_observer$hemisphere=="WS"]
+mushroom_observer$longitude[mushroom_observer$hemisphere=="SW"] <- -mushroom_observer$longitude[mushroom_observer$hemisphere=="SW"]
+mushroom_observer$longitude[mushroom_observer$hemisphere=="WS"] <- -mushroom_observer$longitude[mushroom_observer$hemisphere=="WS"]
+
+mushroom_observer$longitude[mushroom_observer$hemisphere=="NN"] <- -mushroom_observer$longitude[mushroom_observer$hemisphere=="NN"]
+
+##Correction on mushroom observer localization
+#Observation are localized by rectangular zone. Correction with a threshold of height and width. It correspond to an incertitude of 0.1° of latitude and longitude 
+
+mushroom_observer<-subset(mushroom_observer, abs(mushroom_observer$west-mushroom_observer$east)<0.1)
+mushroom_observer<-subset(mushroom_observer, abs(mushroom_observer$north-mushroom_observer$south)<0.1)
+
+##Remove some error of mushroom user localization
+#When there is no localization sometime it's logitude=-179
+  mushroom_observer<-subset(mushroom_observer, mushroom_observer$longitude!=-179.0000)
+  mushroom_observer<-subset(mushroom_observer, mushroom_observer$longitude!=179.0000) 
+
+```
+
+#Amanita dataset for color identification
+##Link species name to color
+Species that are not linked to color are removed
+```{r,echo=TRUE}
+#Reference dataframe for species to color
+species_to_color <- read.table("species_to_color.csv", sep=",", header=TRUE)
+species_to_color<-subset(species_to_color, carp_col!="")
+species_to_color<-unique(species_to_color)
+species_to_color <- species_to_color[order(species_to_color[,1]), ]
+species_to_color$carp_col<-as.character(species_to_color$carp_col)
+species_to_color$spor_col<-as.character(species_to_color$spor_col)
+
+#Remove undefined species from data
+mushroom_observer_color<- mushroom_observer[mushroom_observer$specname%in%species_to_color$spec,]
+mushroom_observer_color<-droplevels(mushroom_observer_color)
+#Remove duplicate from reference dataframe (species_to_color)
+species_to_color<- species_to_color[species_to_color$spec%in%mushroom_observer_color$specname,]
+species_to_color<-droplevels(species_to_color)
+
+#Attribution of color to species in data
+for(i in 1:nrow(mushroom_observer_color)){
+mushroom_observer_color$carp_color[i]<-species_to_color$carp_col[mushroom_observer_color$specname[i]==species_to_color$spec]
+mushroom_observer_color$spore_color[i]<-species_to_color$spor_col[mushroom_observer_color$specname[i]==species_to_color$spec]
+}
+
+mushroom_observer_color <- subset(mushroom_observer_color, carp_color!="" )
+mushroom_observer_color<-droplevels(mushroom_observer_color)
+mushroom_observer_color$carp_color<-as.factor(mushroom_observer_color$carp_color)
+
+```
+
+## Preparation of the dataframe for all organisms from mushroom observer
+```{r,echo=TRUE}
+#Add  columns for latitude and longitude coordinate and color
+mushroom_observer_all <- cbind(mushroom_observer_all,c(0),c(0),c(0),c(0))
+#Name columns
+colnames(mushroom_observer_all) <- c("observation", "specname", "north", "west", "east", "south","hemisphere","latitude","longitude","carp_color","spore_color")
+#Upress rows without species name
+mushroom_observer_all<-subset(mushroom_observer_all,specname!="")
+#Order by species name the dataframe
+mushroom_observer_all <- mushroom_observer_all[order(mushroom_observer_all[,2]), ]
+
+## Longitude and latitude computing from coordinate gathered by php code (north, west, east, south, hemisphere)
+#Calculating latitude and longitude based on location coordinate
+mushroom_observer_all$latitude<-(mushroom_observer_all$north+mushroom_observer_all$south)/2
+mushroom_observer_all$longitude<-(mushroom_observer_all$east+mushroom_observer_all$west)/2
+
+#lat position 8 
+#long position 9
+#hemisphere 7
+mushroom_observer_all$latitude[mushroom_observer_all$hemisphere=="ES"] <- -mushroom_observer_all$latitude[mushroom_observer_all$hemisphere=="ES"]
+mushroom_observer_all$latitude[mushroom_observer_all$hemisphere=="SE"] <- -mushroom_observer_all$latitude[mushroom_observer_all$hemisphere=="SE"]
+mushroom_observer_all$longitude[mushroom_observer_all$hemisphere=="NW"] <- -mushroom_observer_all$longitude[mushroom_observer_all$hemisphere=="NW"]
+mushroom_observer_all$longitude[mushroom_observer_all$hemisphere=="WN"] <- -mushroom_observer_all$longitude[mushroom_observer_all$hemisphere=="WN"]
+mushroom_observer_all$latitude[mushroom_observer_all$hemisphere=="SW"] <- -mushroom_observer_all$latitude[mushroom_observer_all$hemisphere=="SW"]
+mushroom_observer_all$latitude[mushroom_observer_all$hemisphere=="WS"] <- -mushroom_observer_all$latitude[mushroom_observer_all$hemisphere=="WS"]
+mushroom_observer_all$longitude[mushroom_observer_all$hemisphere=="SW"] <- -mushroom_observer_all$longitude[mushroom_observer_all$hemisphere=="SW"]
+mushroom_observer_all$longitude[mushroom_observer_all$hemisphere=="NN"] <- -mushroom_observer_all$longitude[mushroom_observer_all$hemisphere=="NN"]
+
+##Correction on mushroom observer localization
+#Observation are localized by rectangular zone. Correction with a threshold of height and width. It correspond to an incertitude of 0.1° of latitude and longitude 
+
+mushroom_observer_all<-subset(mushroom_observer_all, abs(mushroom_observer_all$west-mushroom_observer_all$east)<0.1)
+mushroom_observer_all<-subset(mushroom_observer_all, abs(mushroom_observer_all$north-mushroom_observer_all$south)<0.1)
+
+##Remove some error of mushroom user localization
+#When there is no localization sometime it's logitude=-179
+  mushroom_observer_all<-subset(mushroom_observer_all, mushroom_observer_all$longitude!=-179.0000)
+  mushroom_observer_all<-subset(mushroom_observer_all, mushroom_observer_all$longitude!=179.0000)
+  
+  #Remove useless column
+mushroom_observer_all$north <- NULL
+mushroom_observer_all$south <- NULL
+mushroom_observer_all$east <- NULL
+mushroom_observer_all$west <- NULL
+mushroom_observer_all$spore_color <- NULL
+mushroom_observer_all$hemisphere <- NULL
+
+#Save it
+write.table(mushroom_observer_all, file = "mushroom_observer_all.csv", sep = ",")
+```
+
+#Data gathering function
+```{r,echo=TRUE}
+database_gathering_climate_soil<-function(dataset){
+#Import map of bioclim variable
+BClim = brick("data/YbrevBC_2.5.grd")
+#Indicate position of different observation
+points <- cbind(dataset$longitude,dataset$latitude)
+#Export variable for position of observation
+clim<- extract(BClim, points)
+#Bind new variable to data
+dataset<-cbind(dataset,clim)
+
+##Gathering of Soil data (harmonized global database)
+#Import data 
+hwsd <- raster("data/HWSD_RASTER/hwsd.bil")
+#Project variable into longitude latitude axis
+(proj4string(hwsd) <- "+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0")
+#Export variable for position of observation
+soil1<- extract(hwsd, points)
+pointcoord<-cbind(points,soil1)
+colnames(pointcoord)<-c("lon","lat","hwsd")
+##Use of SQLite to repair soil data
+m <- dbDriver("SQLite")
+con <- dbConnect(m, dbname = "data/hwsd.db")
+dbWriteTable(con, name="WINDOW_BHUTAN", value=data.frame(smu_id=pointcoord[1,3]), overwrite=TRUE)
+records.bhutan <- dbGetQuery(con, "select T.* from HWSD_DATA as T join WINDOW_BHUTAN as U on T.MU_GLOBAL=U.SMU_ID")
+tablesoil<-records.bhutan
+tablesoil<-tablesoil[0,]
+for (i in 1:nrow(pointcoord)){
+dbWriteTable(con, name="WINDOW_BHUTAN", value=data.frame(smu_id=pointcoord[i,3]), overwrite=TRUE)
+records.bhutan <- dbGetQuery(con, "select T.* from HWSD_DATA as T join WINDOW_BHUTAN as U on T.MU_GLOBAL=U.SMU_ID")
+tablesoil<-rbind(tablesoil,records.bhutan[1,])}
+###Supress useless soil variable for reference
+tablesoil$id<-NULL
+tablesoil$mu_global<-NULL
+tablesoil$mu_source1<-NULL
+tablesoil$mu_source2<-NULL
+tablesoil$coverage<-NULL
+tablesoil$issoil<-NULL
+tablesoil$seq<-NULL
+tablesoil$share<-NULL
+tablesoil$su_code74<-NULL
+tablesoil$su_code85<-NULL
+tablesoil$su_code90<-NULL
+tablesoil$su_sym74<-NULL
+tablesoil$su_sym85<-NULL
+tablesoil$su_sym90<-NULL
+#Add column of soil variable to data
+dataset<-cbind(dataset,tablesoil)
+
+#Some extra variable from harmonized global database sup
+varsup = brick("varsup.grd")
+points <- cbind(dataset$longitude,dataset$latitude)
+varsupex<- extract(varsup, points)
+dataset<-cbind(dataset,varsupex)
+return(dataset)
+}
+```
+
+
+#Save of data
+```{r,echo=TRUE}
+#Save it
+mushroom_observer<-database_gathering_climate_soil(mushroom_observer)
+#mushroom_observer_all<-database_gathering_climate_soil(mushroom_observer_all)
+mushroom_observer_color<-database_gathering_climate_soil(mushroom_observer_color)
+write.table(mushroom_observer, file = "mushroom_observer_amanita.csv", sep = ",")
+#write.table(mushroom_observer_all, file = "mushroom_observer_all.csv", sep = ",")
+write.table(mushroom_observer_color, file = "mushroom_observer_color.csv", sep = ",")
+```
+
+#Dataframe with grouped colors
+```{r,echo=TRUE}
+mushroom_observer_color_group <- mushroom_observer_color
+levels(mushroom_observer_color_group$carp_color)<-c("grey+brown","grey+brown","red+orange+yellow","red+orange+yellow",   "white" ,"red+orange+yellow")
+
+#Just in case
+mushroom_observer_color_group <- subset(mushroom_observer_color_group, carp_color!="" )
+mushroom_observer_color_group<-droplevels(mushroom_observer_color_group)
+write.table(mushroom_observer_color_group, file = "mushroom_observer_color_group.csv", sep = ",")
+```
+
+#Reduction to America function
+```{r,echo=TRUE}
+reduction_to_usa <-function(dataset){
+dataset<-dataset[dataset$latitude>25,]
+dataset<-dataset[dataset$latitude<50,]
+dataset<-dataset[dataset$longitude< -67,]
+dataset<-dataset[dataset$longitude> -130,]
+dataset<-droplevels(dataset)
+return(dataset)
+}
+```
+
+```{r}
+#For mushroom_observer
+mushroom_observer_usa<-reduction_to_usa(mushroom_observer)
+write.table(mushroom_observer_usa, file = "mushroom_observer_amanita_usa.csv", sep = ",")
+#For the dataframe with grouped color
+mushroom_observer_color_usa<-reduction_to_usa(mushroom_observer_color)
+write.table(mushroom_observer_color_usa, file = "mushroom_observer_color_usa.csv", sep = ",")
+#For all
+mushroom_observer_all_usa<-reduction_to_usa(mushroom_observer_all)
+write.table(mushroom_observer_all_usa, file = "mushroom_observer_all_usa.csv", sep = ",")
+```
+
+#iNaturalist dataset preparation
+```{r}
+
+inaturalist_all<-inaturalist_all[,c("id","kingdom","family","genus","scientificName","decimalLongitude","decimalLatitude")]
+
+colnames(inaturalist_all)[colnames(inaturalist_all) == "decimalLatitude"] <-"latitude"
+colnames(inaturalist_all)[colnames(inaturalist_all) == "decimalLongitude"] <-"longitude"
+colnames(inaturalist_all)[colnames(inaturalist_all) == "scientificName"] <-"specname"
+colnames(inaturalist_all)[colnames(inaturalist_all) == "id"] <-"observation"
+
+#inaturalist_all<-database_gathering_climate_soil(inaturalist_all)
+#All iNaturalist observation whatever the organism is
+write.csv(inaturalist_all ,file = "inaturalist_all.csv")
+#Reduction to usa
+inaturalist_all_usa<-reduction_to_usa(inaturalist_all)
+write.csv(inaturalist_all_usa ,file = "inaturalist_all_usa.csv")
+
+#Subset observation to amanita genus
+inaturalist_amanita<-subset(inaturalist_all,genus=="Amanita")
+write.csv(inaturalist_amanita ,file = "inaturalist_amanita.csv")
+
+#Reduction to USA
+inaturalist_amanita_usa<-reduction_to_usa(inaturalist_amanita)
+write.csv(inaturalist_amanita_usa ,file = "inaturalist_amanita_usa.csv")
+
+#Subset observation to plantae kingdom
+inaturalist_plantae<-subset(inaturalist_all,kingdom=="Plantae")
+write.csv(inaturalist_plantae ,file = "inaturalist_plantae.csv")
+
+```
+
+
+
+#Dictionnary of Amanita species
+```{r}
+spec_dict<-read.csv("spec_dict.csv",header=FALSE)
+rownames(spec_dict)<-c()
+colnames(spec_dict)<-c()
+spec_dict<-t(spec_dict)
+spec_dict<-spec_dict[,2]
+spec_dict<-gsub(pattern="(</i>)","" ,x=spec_dict)
+spec_dict<-gsub(pattern="(<i>)","" ,x=spec_dict)
+spec_dict<-sub("\\s+$", "", spec_dict)
+spec_dict<-paste("Amanita",spec_dict)
+write.table(spec_dict ,file = "amanita_species_name.csv",sep=",")
+```
+
+
+
+
