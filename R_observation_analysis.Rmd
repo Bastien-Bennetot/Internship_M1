@@ -16,7 +16,6 @@ knitr::opts_chunk$set(echo = FALSE,warning = FALSE, message=FALSE)
 setwd("~/Bureau/STAGE M1 IMPORTANT/algo")
 library(dplyr)
 library(ggplot2)
-#library(rgbif)
 library(ggmap)
 require(plyr)
 require(reshape2)
@@ -58,6 +57,9 @@ mushroom_observer_amanita<-amanita_specname(mushroom_observer_amanita,amanita_sp
 mushroom_observer_amanita_usa<-amanita_specname(mushroom_observer_amanita_usa,amanita_species_name)
 inaturalist_amanita<-amanita_specname(inaturalist_amanita,amanita_species_name)
 inaturalist_amanita_usa<-amanita_specname(inaturalist_amanita_usa,amanita_species_name)
+gbif_amanita<-amanita_specname(gbif_amanita,amanita_species_name)
+
+
 
 #Reduction to America function
 reduction_to_usa <-function(dataset){
@@ -69,22 +71,18 @@ dataset<-droplevels(dataset)
 return(dataset)
 }
 
+
+
+gbif_amanita_usa<-reduction_to_usa(gbif_amanita)
+
 #Mixed dataset
-
-mushroom_observer_amanita2<-data.frame(mushroom_observer_amanita$observation,mushroom_observer_amanita$latitude,mushroom_observer_amanita$longitude,mushroom_observer_amanita$specname)
-inaturalist_amanita2<-data.frame(inaturalist_amanita$observation,inaturalist_amanita$latitude,inaturalist_amanita$longitude,inaturalist_amanita$specname)
-colnames(mushroom_observer_amanita2)<-c("observation","latitude","longitude","specname")
-colnames(inaturalist_amanita2)<-c("observation","latitude","longitude","specname")
-mixed_amanita<- rbind(inaturalist_amanita2,mushroom_observer_amanita2)
+gbif_amanita$observation <- seq.int(nrow(gbif_amanita))
+mushroom_observer_amanita<-mushroom_observer_amanita[,c("observation","latitude","longitude","specname")]
+inaturalist_amanita<-inaturalist_amanita[,c("observation","latitude","longitude","specname")]
+gbif_amanita<-gbif_amanita[,c("observation","latitude","longitude","specname")]
+mixed_amanita<- rbind(gbif_amanita,mushroom_observer_amanita)
+mixed_amanita$observation <- seq.int(nrow(mixed_amanita))
 mixed_amanita_usa<-reduction_to_usa(mixed_amanita)
-
-#mushroom_observer_all2<-data.frame(mushroom_observer_all$observation,mushroom_observer_all$latitude,mushroom_observer_all$longitude,mushroom_observer_all$specname)
-#inaturalist_all2<-data.frame(inaturalist_all$observation,inaturalist_all$latitude,inaturalist_all$longitude,inaturalist_all$specname)
-#colnames(mushroom_observer_all2)<-c("observation","latitude","longitude","specname")
-#colnames(inaturalist_all2)<-c("observation","latitude","longitude","specname")
-#mixed_all<- rbind(inaturalist_all2,mushroom_observer_all2)
-#mixed_all_usa<-reduction_to_usa(mixed_all)
-
 
 
 #Plot observation map for each species function
@@ -124,10 +122,21 @@ plot_observation_map(inaturalist_amanita,"all amanita from iNaturalist","world")
 plot_observation_map(inaturalist_amanita_usa,"all amanita from iNaturalist in the usa","usa")
 ``` 
 
+#All amanita from gbif
+```{r}
+plot_observation_map(gbif_amanita,"all amanita from gbif","world")
+```
+
+#All amanita from gbif in the USA
+```{r}
+plot_observation_map(gbif_amanita_usa,"all amanita from gbif","world")
+```
+
 #All amanita from all data
 ```{r}
 plot_observation_map(mixed_amanita,"all amanita from mixed data","world")
 ``` 
+
 
 
 #All amanita from all data in the usa
@@ -135,9 +144,7 @@ plot_observation_map(mixed_amanita,"all amanita from mixed data","world")
 plot_observation_map(mixed_amanita_usa,"all amanita from mixed data in the usa","usa")
 ``` 
 
-```{r}
-plot_observation_map(gbif_amanita,"all amanita from rgbif","world")
-```
+
 
 
 

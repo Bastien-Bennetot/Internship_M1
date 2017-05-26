@@ -3,8 +3,8 @@ title: "Pre-analysis script for data preparation"
 author: "Bastien BENNETOT"
 date: "13 avril 2017"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 #Mushroom observer
@@ -28,6 +28,10 @@ library(RSQLite)
 mushroom_observer <- read.table("mushroom_observer_170203.csv", sep=",")
 mushroom_observer_all <- read.table("mushroom_observer_all_170220.csv", sep=",")
 inaturalist_all <-read.csv( file = "iNaturalist_all_170505.csv")
+
+#data_gbif<-gbif(geo = T,genus = "Amanita")
+#write.csv(data_gbif,file = "gbif_amanita_170519.csv")
+gbif_amanita<-read.csv("gbif_amanita_170519.csv")
 ```
 
 ## Preparation of the dataframe for amanita only from mushroom observer
@@ -261,7 +265,7 @@ write.table(mushroom_observer_all_usa, file = "mushroom_observer_all_usa.csv", s
 
 #iNaturalist dataset preparation
 ```{r}
-
+inaturalist_all<-inaturalist_all[inaturalist_all$coordinateUncertaintyInMeters<8800,]
 inaturalist_all<-inaturalist_all[,c("id","kingdom","family","genus","scientificName","decimalLongitude","decimalLatitude")]
 
 colnames(inaturalist_all)[colnames(inaturalist_all) == "decimalLatitude"] <-"latitude"
@@ -290,6 +294,15 @@ write.csv(inaturalist_plantae ,file = "inaturalist_plantae.csv")
 
 ```
 
+#Gbif dataset preparation
+```{r}
+gbif_amanita<-gbif_amanita[gbif_amanita$coordinateUncertaintyInMeters<8800,]
+gbif_amanita<-gbif_amanita[,c("kingdom","family","genus","scientificName","lon","lat")]
+colnames(gbif_amanita)[colnames(gbif_amanita) == "lat"] <-"latitude"
+colnames(gbif_amanita)[colnames(gbif_amanita) == "lon"] <-"longitude"
+colnames(gbif_amanita)[colnames(gbif_amanita) == "scientificName"] <-"specname"
+write.csv(gbif_amanita,file = "gbif_amanita.csv")
+```
 
 
 #Dictionnary of Amanita species
@@ -305,6 +318,7 @@ spec_dict<-sub("\\s+$", "", spec_dict)
 spec_dict<-paste("Amanita",spec_dict)
 write.table(spec_dict ,file = "amanita_species_name.csv",sep=",")
 ```
+
 
 
 
